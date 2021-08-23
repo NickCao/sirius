@@ -15,7 +15,7 @@
         rec {
           defaultPackage = pkgs.sirius;
           devShell = pkgs.mkShell {
-            inputsFrom = [ defaultPackage ];
+            buildInputs = [ (pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override { extensions = [ "rust-analyzer-preview" "rust-src" ]; })) ];
           };
         }
       ) //
