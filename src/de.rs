@@ -1,5 +1,8 @@
+use crate::consts::Op;
 use crate::error::Error;
-use serde::de::{self, Deserialize};
+use crate::types::PathInfo;
+use serde::de;
+use serde::Deserialize;
 
 pub struct Deserializer<'de, R> {
     read: &'de mut R,
@@ -41,13 +44,22 @@ where
         self.read.read_exact(&mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
-    fn parse_string(&mut self) -> crate::error::Result<String> {
+    fn parse_bool(&mut self) -> crate::error::Result<bool> {
+        let num = self.parse_u64()?;
+        Ok(num == 0)
+    }
+    fn parse_bytes(&mut self) -> crate::error::Result<Vec<u8>> {
         let len: usize = self.parse_u64()?.try_into()?;
         let rem = len % 8;
         let pad = if rem == 0 { 0 } else { 8 - rem };
         let mut buf = vec![0; len + pad];
         self.read.read_exact(&mut buf)?;
-        Ok(String::from_utf8(buf[..len].to_vec())?)
+        buf.truncate(len);
+        Ok(buf)
+    }
+    fn parse_string(&mut self) -> crate::error::Result<String> {
+        let buf = self.parse_bytes()?;
+        Ok(String::from_utf8(buf)?)
     }
 }
 
@@ -58,6 +70,23 @@ where
     type Error = Error;
     fn deserialize_u64<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         visitor.visit_u64(self.parse_u64()?)
+    }
+    fn deserialize_bool<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        visitor.visit_bool(self.parse_bool()?)
+    }
+    fn deserialize_option<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        let some = self.parse_bool()?;
+        if some {
+            visitor.visit_some(self)
+        } else {
+            visitor.visit_none()
+        }
+    }
+    fn deserialize_byte_buf<V: de::Visitor<'de>>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        visitor.visit_byte_buf(self.parse_bytes()?)
     }
     fn deserialize_string<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         visitor.visit_string(self.parse_string()?)
@@ -70,8 +99,35 @@ where
         };
         visitor.visit_seq(seq)
     }
+    fn deserialize_tuple<V: de::Visitor<'de>>(
+        self,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        let seq = SeqDeserializer {
+            de: self,
+            remain: len.try_into()?,
+        };
+        visitor.visit_seq(seq)
+    }
+    fn deserialize_struct<V: de::Visitor<'de>>(
+        self,
+        _name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_tuple(fields.len(), visitor)
+    }
+    fn deserialize_tuple_struct<V: de::Visitor<'de>>(
+        self,
+        _name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_tuple(len, visitor)
+    }
+    deserialize_unimplemented!(deserialize_str);
     deserialize_unimplemented!(deserialize_any);
-    deserialize_unimplemented!(deserialize_bool);
     deserialize_unimplemented!(deserialize_i8);
     deserialize_unimplemented!(deserialize_i16);
     deserialize_unimplemented!(deserialize_i32);
@@ -82,10 +138,7 @@ where
     deserialize_unimplemented!(deserialize_f32);
     deserialize_unimplemented!(deserialize_f64);
     deserialize_unimplemented!(deserialize_char);
-    deserialize_unimplemented!(deserialize_str);
     deserialize_unimplemented!(deserialize_bytes);
-    deserialize_unimplemented!(deserialize_byte_buf);
-    deserialize_unimplemented!(deserialize_option);
     deserialize_unimplemented!(deserialize_unit);
     deserialize_unimplemented!(deserialize_map);
     deserialize_unimplemented!(deserialize_identifier);
@@ -104,29 +157,6 @@ where
     ) -> Result<V::Value, Self::Error> {
         unimplemented!()
     }
-    fn deserialize_tuple<V: de::Visitor<'de>>(
-        self,
-        _len: usize,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        unimplemented!()
-    }
-    fn deserialize_tuple_struct<V: de::Visitor<'de>>(
-        self,
-        _name: &'static str,
-        _len: usize,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        unimplemented!()
-    }
-    fn deserialize_struct<V: de::Visitor<'de>>(
-        self,
-        _name: &'static str,
-        _fields: &'static [&'static str],
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        unimplemented!()
-    }
     fn deserialize_enum<V: de::Visitor<'de>>(
         self,
         _name: &'static str,
@@ -134,6 +164,25 @@ where
         _visitor: V,
     ) -> Result<V::Value, Self::Error> {
         unimplemented!()
+    }
+}
+
+struct FramedReader<'a, R> {
+    read: &'a mut R,
+    rem: usize,
+}
+
+impl<'a, R: std::io::Read> std::io::Read for FramedReader<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+        if self.rem == 0 {
+            self.rem = usize::deserialize(&mut Deserializer {
+                read: &mut self.read,
+            })
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        }
+        let size = self.read.take(self.rem.try_into().unwrap()).read(buf)?;
+        self.rem -= size;
+        Ok(size)
     }
 }
 
@@ -174,4 +223,104 @@ fn test_string_seq() {
         vec!["hello"; 5],
         Vec::<String>::deserialize(&mut Deserializer { read: &mut read }).unwrap()
     )
+}
+
+#[test]
+fn test_some() {
+    let mut read: &[u8] = &[
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00,
+    ][..];
+    assert_eq!(
+        Some(42),
+        Option::<u64>::deserialize(&mut Deserializer { read: &mut read }).unwrap()
+    )
+}
+
+#[test]
+fn test_none() {
+    let mut read: &[u8] = &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00][..];
+    assert_eq!(
+        None,
+        Option::<u64>::deserialize(&mut Deserializer { read: &mut read }).unwrap()
+    )
+}
+
+#[test]
+fn test_tuple() {
+    let mut read: &[u8] = &[
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ][..];
+    assert_eq!(
+        (1, 2, 3),
+        <(u64, u64, u64)>::deserialize(&mut Deserializer { read: &mut read }).unwrap()
+    )
+}
+
+#[test]
+fn test_struct() {
+    #[derive(Deserialize, Debug, PartialEq)]
+    struct Test {
+        name: String,
+        num: u64,
+    }
+    let mut read: &[u8] = &[
+        0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 'h' as u8, 'e' as u8, 'l' as u8, 'l' as u8,
+        'o' as u8, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ][..];
+    assert_eq!(
+        Test {
+            name: String::from("hello"),
+            num: 42
+        },
+        Test::deserialize(&mut Deserializer { read: &mut read }).unwrap()
+    )
+}
+
+#[test]
+fn test_large() {
+    let mut file = std::fs::File::open("data/de").unwrap();
+    {
+        let mut des = Deserializer { read: &mut file };
+        assert_eq!(
+            crate::consts::WORKER_MAGIC_1,
+            u64::deserialize(&mut des).unwrap()
+        );
+        assert_eq!(288, u64::deserialize(&mut des).unwrap());
+        assert_eq!(Some(0), Option::<u64>::deserialize(&mut des).unwrap());
+    }
+    loop {
+        let mut des = Deserializer { read: &mut file };
+        let op = Op::deserialize(&mut des).unwrap();
+        match op {
+            Op::Nop => (),
+            Op::QueryPathInfo => {
+                String::deserialize(&mut des).unwrap();
+            }
+            Op::QueryValidPaths => {
+                Vec::<String>::deserialize(&mut des).unwrap();
+                bool::deserialize(&mut des).unwrap();
+            }
+            Op::AddMultipleToStore => {
+                bool::deserialize(&mut des).unwrap();
+                bool::deserialize(&mut des).unwrap();
+                let mut des = Deserializer {
+                    read: &mut FramedReader {
+                        read: &mut file,
+                        rem: 0,
+                    },
+                };
+                let num_paths = u64::deserialize(&mut des).unwrap();
+                for i in 0..num_paths {
+                    println!("{:?}", PathInfo::deserialize(&mut des).unwrap());
+                    unimplemented!()
+                }
+            }
+            _ => {
+                println!("{:?}", op);
+                unimplemented!();
+            }
+        }
+    }
 }
