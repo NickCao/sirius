@@ -38,17 +38,20 @@ macro_rules! implement_serialize_seq {
             where
                 T: Serialize,
             {
-                if self.remain == 0 {
-                    return Err(Self::Error::Message("too many elements".to_string()));
-                }
                 if !self.len_sent {
                     self.remain.serialize(&mut *self.ser)?;
                     self.len_sent = true;
+                }
+                if self.remain == 0 {
+                    return Err(Self::Error::Message("too many elements".to_string()));
                 }
                 self.remain -= 1;
                 value.serialize(&mut *self.ser)
             }
             fn end(self) -> Result<Self::Ok, Self::Error> {
+                if !self.len_sent {
+                    self.remain.serialize(&mut *self.ser)?;
+                }
                 if self.remain == 0 {
                     return Ok(());
                 }
@@ -125,16 +128,20 @@ impl<'a, 'b, W: std::io::Write> ser::SerializeMap for SeqSerializer<'a, 'b, W> {
     where
         T: Serialize,
     {
-        if self.remain == 0 {
-            return Err(Self::Error::Message("too many elements".to_string()));
-        }
         if !self.len_sent {
             self.remain.serialize(&mut *self.ser)?;
+            self.len_sent = true;
+        }
+        if self.remain == 0 {
+            return Err(Self::Error::Message("too many elements".to_string()));
         }
         self.remain -= 1;
         value.serialize(&mut *self.ser)
     }
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        if !self.len_sent {
+            self.remain.serialize(&mut *self.ser)?;
+        }
         if self.remain == 0 {
             return Ok(());
         }

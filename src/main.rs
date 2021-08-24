@@ -48,11 +48,22 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 }
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
-            /*
             Op::QueryPathInfo => {
                 String::deserialize(&mut des).unwrap();
+                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                Some(PathInfoWithoutPath {
+                    deriver: "".to_string(),
+                    hash: "0sg9f58l1jj88w6pdrfdpj5x9b1zrwszk84j81zvby36q9whhhqa".to_string(),
+                    references: vec![],
+                    registration_time: 0,
+                    nar_size: 120,
+                    ultimate: true,
+                    sigs: vec![],
+                    ca: "".to_string(),
+                })
+                .serialize(&mut ser)
+                .unwrap();
             }
-            */
             Op::QueryValidPaths => {
                 Vec::<String>::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
@@ -81,7 +92,14 @@ fn handle(conn: std::os::unix::net::UnixStream) {
             Op::BuildDerivation => {
                 println!("{:?}", BasicDerivation::deserialize(&mut des).unwrap());
                 u64::deserialize(&mut des).unwrap();
-                // TODO: impl
+                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                consts::BuildStatus::Built.serialize(&mut ser).unwrap();
+                String::from("built").serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap();
             }
             /*
             Op::NarFromPath => {

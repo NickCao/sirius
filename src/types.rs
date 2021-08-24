@@ -13,6 +13,18 @@ pub struct PathInfo {
     pub ca: String,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct PathInfoWithoutPath {
+    pub deriver: String,
+    pub hash: String,
+    pub references: Vec<String>,
+    pub registration_time: u64,
+    pub nar_size: u64,
+    pub ultimate: bool,
+    pub sigs: Vec<String>,
+    pub ca: String,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct DerivationOutput {
     pub name: String,
