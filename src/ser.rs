@@ -213,11 +213,7 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
         self.serialize_bytes(v.as_bytes())
     }
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        let len = v.len();
-        let rem = len % 8;
-        let pad = if rem == 0 { 0 } else { 8 - rem };
-        self.write.write_all(v)?;
-        Ok(self.write.write_all(&vec![0; pad])?)
+        self.write_bytes(v)
     }
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.serialize_bool(false)
