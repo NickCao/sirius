@@ -1,4 +1,5 @@
 use serde::de;
+use serde::ser;
 use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -9,11 +10,18 @@ pub enum Error {
     IO(std::io::Error),
     FromUtf8(std::string::FromUtf8Error),
     TryFromInt(std::num::TryFromIntError),
+    NotImplemented,
 }
 
 impl std::error::Error for Error {}
 
 impl de::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Error::Message(msg.to_string())
+    }
+}
+
+impl ser::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::Message(msg.to_string())
     }
@@ -26,6 +34,7 @@ impl fmt::Display for Error {
             Error::IO(e) => e.fmt(formatter),
             Error::FromUtf8(e) => e.fmt(formatter),
             Error::TryFromInt(e) => e.fmt(formatter),
+            Error::NotImplemented => formatter.write_str("not implemented"),
         }
     }
 }

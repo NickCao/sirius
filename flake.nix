@@ -29,7 +29,12 @@
           sirius = platform.buildRustPackage {
             name = "sirius";
             src = final.lib.cleanSource ./.;
-            cargoLock.lockFile = ./Cargo.lock;
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+              outputHashes = {
+                "libnar-0.1.0" = "sha256-rzAxomiOtMuvJMTvbMnW12POUV5t177wgdi3pAHSjFE=";
+              };
+            };
           };
         };
     };

@@ -278,6 +278,7 @@ fn test_struct() {
     )
 }
 
+/*
 #[test]
 fn test_large() {
     let mut file = std::fs::File::open("data/de").unwrap();
@@ -349,3 +350,4 @@ fn test_large() {
         }
     }
 }
+*/
