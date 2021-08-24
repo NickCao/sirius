@@ -1,4 +1,3 @@
-
 use crate::error::Error;
 use serde::ser;
 use serde::Serialize;
@@ -7,6 +6,27 @@ pub struct SeqSerializer<'a, 'b, T> {
     ser: &'a mut Serializer<'b, T>,
     len_sent: bool,
     remain: u64,
+}
+
+impl<'a, 'b, W: std::io::Write> ser::SerializeTuple for SeqSerializer<'a, 'b, W> {
+    type Ok = ();
+    type Error = Error;
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize,
+    {
+        if self.remain == 0 {
+            return Err(Self::Error::Message("too many elements".to_string()));
+        }
+        self.remain -= 1;
+        value.serialize(&mut *self.ser)
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        if self.remain == 0 {
+            return Ok(());
+        }
+        Err(Self::Error::Message("too less elements".to_string()))
+    }
 }
 
 macro_rules! implement_serialize_seq {
@@ -23,6 +43,7 @@ macro_rules! implement_serialize_seq {
                 }
                 if !self.len_sent {
                     self.remain.serialize(&mut *self.ser)?;
+                    self.len_sent = true;
                 }
                 self.remain -= 1;
                 value.serialize(&mut *self.ser)
@@ -53,9 +74,6 @@ macro_rules! implement_serialize_struct {
                 if self.remain == 0 {
                     return Err(Self::Error::Message("too many elements".to_string()));
                 }
-                if !self.len_sent {
-                    self.remain.serialize(&mut *self.ser)?;
-                }
                 self.remain -= 1;
                 value.serialize(&mut *self.ser)
             }
@@ -80,9 +98,6 @@ macro_rules! implement_serialize_tuple_struct {
             {
                 if self.remain == 0 {
                     return Err(Self::Error::Message("too many elements".to_string()));
-                }
-                if !self.len_sent {
-                    self.remain.serialize(&mut *self.ser)?;
                 }
                 self.remain -= 1;
                 value.serialize(&mut *self.ser)
@@ -128,7 +143,6 @@ impl<'a, 'b, W: std::io::Write> ser::SerializeMap for SeqSerializer<'a, 'b, W> {
 }
 
 implement_serialize_seq!(ser::SerializeSeq);
-implement_serialize_seq!(ser::SerializeTuple);
 implement_serialize_tuple_struct!(ser::SerializeTupleStruct);
 implement_serialize_tuple_struct!(ser::SerializeTupleVariant);
 implement_serialize_struct!(ser::SerializeStruct);
@@ -296,4 +310,103 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
 }
 
 #[test]
-fn test_u64() {}
+fn test_u64() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    (42 as u64).serialize(&mut ser).unwrap();
+    assert_eq!(buf, [0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+}
+
+#[test]
+fn test_string() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    String::from("hello").serialize(&mut ser).unwrap();
+    assert_eq!(
+        buf,
+        [
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
+            0x00, 0x00
+        ]
+    );
+}
+
+#[test]
+fn test_string_seq() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    vec![String::from("hello"); 5].serialize(&mut ser).unwrap();
+    assert_eq!(
+        buf,
+        [
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00, 0x05, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00,
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
+            0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l',
+            b'o', 0x00, 0x00, 0x00
+        ]
+    );
+}
+
+#[test]
+fn test_none() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    Option::<u64>::None.serialize(&mut ser).unwrap();
+    assert_eq!(buf, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+}
+
+#[test]
+fn test_some() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    Option::<u64>::Some(42).serialize(&mut ser).unwrap();
+    assert_eq!(
+        buf,
+        [
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00
+        ]
+    );
+}
+
+#[test]
+fn test_tuple() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    let t: (u64, u64, u64) = (1, 2, 3);
+    t.serialize(&mut ser).unwrap();
+    assert_eq!(
+        buf,
+        [
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]
+    );
+}
+
+#[test]
+fn test_struct() {
+    let mut buf = vec![];
+    let mut ser = Serializer { write: &mut buf };
+    #[derive(Serialize, Debug, PartialEq)]
+    struct Test {
+        name: String,
+        num: u64,
+    }
+    Test {
+        name: String::from("hello"),
+        num: 42,
+    }
+    .serialize(&mut ser)
+    .unwrap();
+    assert_eq!(
+        buf,
+        [
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
+            0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]
+    );
+}
