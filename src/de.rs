@@ -1,6 +1,6 @@
 use crate::consts::Op;
 use crate::error::Error;
-use crate::types::PathInfo;
+use crate::types::{BasicDerivation, PathInfo};
 use serde::de;
 use serde::Deserialize;
 
@@ -292,7 +292,16 @@ fn test_large() {
     }
     loop {
         let mut des = Deserializer { read: &mut file };
-        let op = Op::deserialize(&mut des).unwrap();
+        let op = match Op::deserialize(&mut des) {
+            Ok(op) => op,
+            Err(Error::IO(e)) => {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    break;
+                }
+                panic!()
+            }
+            _ => panic!(),
+        };
         match op {
             Op::Nop => (),
             Op::QueryPathInfo => {
@@ -305,17 +314,33 @@ fn test_large() {
             Op::AddMultipleToStore => {
                 bool::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
-                let mut des = Deserializer {
-                    read: &mut FramedReader {
-                        read: &mut file,
-                        rem: 0,
-                    },
+                let mut read = FramedReader {
+                    read: &mut file,
+                    rem: 0,
                 };
-                let num_paths = u64::deserialize(&mut des).unwrap();
-                for i in 0..num_paths {
-                    println!("{:?}", PathInfo::deserialize(&mut des).unwrap());
-                    unimplemented!()
+                let mut num_paths = 0;
+                {
+                    let mut des = Deserializer { read: &mut read };
+                    num_paths = u64::deserialize(&mut des).unwrap();
                 }
+                for i in 0..num_paths {
+                    {
+                        let mut des = Deserializer { read: &mut read };
+                        println!("{:?}", PathInfo::deserialize(&mut des).unwrap());
+                    }
+                    let mut nar = libnar::Archive::new(&mut read);
+                    let entries = nar.entries().unwrap();
+                    for entry in entries {
+                        entry.unwrap();
+                    }
+                }
+            }
+            Op::BuildDerivation => {
+                println!("{:?}", BasicDerivation::deserialize(&mut des).unwrap());
+                u64::deserialize(&mut des).unwrap();
+            }
+            Op::NarFromPath => {
+                println!("{:?}", String::deserialize(&mut des).unwrap());
             }
             _ => {
                 println!("{:?}", op);
