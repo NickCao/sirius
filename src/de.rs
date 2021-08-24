@@ -38,6 +38,9 @@ impl<'de, R> Deserializer<'de, R>
 where
     R: std::io::Read,
 {
+    pub fn new(read: &'de mut R) -> Self {
+        Self { read }
+    }
     fn parse_u64(&mut self) -> crate::error::Result<u64> {
         let mut buf: [u8; 8] = [0; 8];
         self.read.read_exact(&mut buf)?;
@@ -166,9 +169,15 @@ where
     }
 }
 
-struct FramedReader<'a, R> {
+pub struct FramedReader<'a, R> {
     read: &'a mut R,
     rem: usize,
+}
+
+impl<'a, R> FramedReader<'a, R> {
+    pub fn new(read: &'a mut R) -> Self {
+        Self { read, rem: 0 }
+    }
 }
 
 impl<'a, R: std::io::Read> std::io::Read for FramedReader<'a, R> {
@@ -274,77 +283,3 @@ fn test_struct() {
         Test::deserialize(&mut Deserializer { read: &mut read }).unwrap()
     )
 }
-
-/*
-#[test]
-fn test_large() {
-    let mut file = std::fs::File::open("data/de").unwrap();
-    {
-        let mut des = Deserializer { read: &mut file };
-        assert_eq!(
-            crate::consts::WORKER_MAGIC_1,
-            u64::deserialize(&mut des).unwrap()
-        );
-        assert_eq!(288, u64::deserialize(&mut des).unwrap());
-        assert_eq!(Some(0), Option::<u64>::deserialize(&mut des).unwrap());
-    }
-    loop {
-        let mut des = Deserializer { read: &mut file };
-        let op = match Op::deserialize(&mut des) {
-            Ok(op) => op,
-            Err(Error::IO(e)) => {
-                if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                    break;
-                }
-                panic!()
-            }
-            _ => panic!(),
-        };
-        match op {
-            Op::Nop => (),
-            Op::QueryPathInfo => {
-                String::deserialize(&mut des).unwrap();
-            }
-            Op::QueryValidPaths => {
-                Vec::<String>::deserialize(&mut des).unwrap();
-                bool::deserialize(&mut des).unwrap();
-            }
-            Op::AddMultipleToStore => {
-                bool::deserialize(&mut des).unwrap();
-                bool::deserialize(&mut des).unwrap();
-                let mut read = FramedReader {
-                    read: &mut file,
-                    rem: 0,
-                };
-                let mut num_paths = 0;
-                {
-                    let mut des = Deserializer { read: &mut read };
-                    num_paths = u64::deserialize(&mut des).unwrap();
-                }
-                for i in 0..num_paths {
-                    {
-                        let mut des = Deserializer { read: &mut read };
-                        println!("{:?}", PathInfo::deserialize(&mut des).unwrap());
-                    }
-                    let mut nar = libnar::Archive::new(&mut read);
-                    let entries = nar.entries().unwrap();
-                    for entry in entries {
-                        entry.unwrap();
-                    }
-                }
-            }
-            Op::BuildDerivation => {
-                println!("{:?}", BasicDerivation::deserialize(&mut des).unwrap());
-                u64::deserialize(&mut des).unwrap();
-            }
-            Op::NarFromPath => {
-                println!("{:?}", String::deserialize(&mut des).unwrap());
-            }
-            _ => {
-                println!("{:?}", op);
-                unimplemented!();
-            }
-        }
-    }
-}
-*/

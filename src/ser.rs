@@ -153,6 +153,9 @@ pub struct Serializer<'a, W> {
 }
 
 impl<'a, W: std::io::Write> Serializer<'a, W> {
+    pub fn new(write: &'a mut W) -> Self {
+        Self { write }
+    }
     fn write_u64(&mut self, v: u64) -> crate::error::Result<()> {
         Ok(self.write.write_all(&v.to_le_bytes())?)
     }
@@ -313,7 +316,7 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
 fn test_u64() {
     let mut buf = vec![];
     let mut ser = Serializer { write: &mut buf };
-    (42 as u64).serialize(&mut ser).unwrap();
+    42_u64.serialize(&mut ser).unwrap();
     assert_eq!(buf, [0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 }
 

@@ -2,6 +2,9 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub const WORKER_MAGIC_1: u64 = 0x6e697863;
 pub const WORKER_MAGIC_2: u64 = 0x6478696f;
+pub const PROTOCOL_VERSION: u64 = 1 << 8 | 32;
+
+pub const STDERR_LAST: u64 = 0x616c7473;
 
 #[derive(Serialize_repr, Deserialize_repr, Debug)]
 #[repr(u64)]

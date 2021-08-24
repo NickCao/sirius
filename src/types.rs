@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct PathInfo {
     pub path: String,
     pub deriver: String,
@@ -30,4 +30,21 @@ pub struct BasicDerivation {
     pub builder: String,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ClientSettings {
+    pub keep_failed: bool,
+    pub keep_going: bool,
+    pub try_fallback: bool,
+    pub verbosity: u64,
+    pub max_build_jobs: u64,
+    pub max_silent_time: u64,
+    pub use_build_hook: u64, // obsolete
+    pub verbose_build: u64,
+    pub log_type: u64,          // obsolete
+    pub print_build_trace: u64, // obsolete
+    pub build_cores: u64,
+    pub use_subsitutes: bool,
+    pub overrides: Vec<(String, String)>,
 }
