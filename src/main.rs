@@ -101,11 +101,17 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
             }
-            /*
             Op::NarFromPath => {
                 println!("{:?}", String::deserialize(&mut des).unwrap());
+                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                "nix-archive-1".serialize(&mut ser).unwrap();
+                "(".serialize(&mut ser).unwrap();
+                "type".serialize(&mut ser).unwrap();
+                "regular".serialize(&mut ser).unwrap();
+                "contents".serialize(&mut ser).unwrap();
+                "hello".serialize(&mut ser).unwrap();
+                ")".serialize(&mut ser).unwrap();
             }
-            */
             _ => {
                 println!("{:?}", op);
                 unimplemented!();
