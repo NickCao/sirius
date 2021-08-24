@@ -1,4 +1,4 @@
-use crate::consts::Op;
+
 use crate::error::Error;
 use serde::ser;
 use serde::Serialize;
@@ -44,7 +44,7 @@ macro_rules! implement_serialize_struct {
             type Error = Error;
             fn serialize_field<T: ?Sized>(
                 &mut self,
-                key: &'static str,
+                _key: &'static str,
                 value: &T,
             ) -> Result<(), Self::Error>
             where
@@ -177,20 +177,20 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
     type SerializeStruct = SeqSerializer<'b, 'a, W>;
     type SerializeStructVariant = SeqSerializer<'b, 'a, W>;
 
-    serialize_unimplemented!(serialize_i8, v: i8);
-    serialize_unimplemented!(serialize_i16, v: i16);
-    serialize_unimplemented!(serialize_i32, v: i32);
-    serialize_unimplemented!(serialize_i64, v: i64);
-    serialize_unimplemented!(serialize_f32, v: f32);
-    serialize_unimplemented!(serialize_f64, v: f64);
-    serialize_unimplemented!(serialize_char, v: char);
+    serialize_unimplemented!(serialize_i8, _v: i8);
+    serialize_unimplemented!(serialize_i16, _v: i16);
+    serialize_unimplemented!(serialize_i32, _v: i32);
+    serialize_unimplemented!(serialize_i64, _v: i64);
+    serialize_unimplemented!(serialize_f32, _v: f32);
+    serialize_unimplemented!(serialize_f64, _v: f64);
+    serialize_unimplemented!(serialize_char, _v: char);
     serialize_unimplemented!(serialize_unit);
-    serialize_unimplemented!(serialize_unit_struct, name: &'static str);
+    serialize_unimplemented!(serialize_unit_struct, _name: &'static str);
     serialize_unimplemented!(
         serialize_unit_variant,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str
     );
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
@@ -228,7 +228,7 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
     }
     fn serialize_newtype_struct<T: ?Sized>(
         self,
-        name: &'static str,
+        _name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
@@ -238,9 +238,9 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
     }
     fn serialize_newtype_variant<T: ?Sized>(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
@@ -264,16 +264,16 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
     }
     fn serialize_tuple_struct(
         self,
-        name: &'static str,
+        _name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.serialize_seq(Some(len))
     }
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         self.serialize_seq(Some(len))
@@ -283,16 +283,16 @@ impl<'a, 'b, W: std::io::Write> ser::Serializer for &'b mut Serializer<'a, W> {
     }
     fn serialize_struct(
         self,
-        name: &'static str,
+        _name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         self.serialize_seq(Some(len))
     }
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         self.serialize_seq(Some(len))
