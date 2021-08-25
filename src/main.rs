@@ -1,10 +1,42 @@
+use argh::FromArgs;
 use serde::{Deserialize, Serialize};
 use sirius::consts::{self, Op};
 use sirius::de::Deserializer;
 use sirius::ser::Serializer;
 use sirius::types::*;
 
-fn handle(conn: std::os::unix::net::UnixStream) {
+#[derive(FromArgs)]
+/// sirius
+struct Args {
+    /// path to store
+    #[argh(option)]
+    store: String,
+    /// path to socket
+    #[argh(option)]
+    socket: String,
+}
+
+fn main() {
+    let args: Args = argh::from_env();
+    let ln = std::os::unix::net::UnixListener::bind(args.socket).unwrap();
+    let db = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
+    for stream in ln.incoming() {
+        match stream {
+            Ok(stream) => {
+                let db = db.clone();
+                let store = args.store.clone();
+                std::thread::spawn(move || handle(stream, std::path::Path::new(&store), db));
+            }
+            Err(err) => panic!("{}", err),
+        }
+    }
+}
+
+fn handle(
+    conn: std::os::unix::net::UnixStream,
+    store: &std::path::Path,
+    db: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<String, PathInfo>>>,
+) {
     let mut read = conn.try_clone().unwrap();
     let mut write = conn.try_clone().unwrap();
     {
@@ -36,6 +68,7 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 println!("{:?}", ClientSettings::deserialize(&mut des).unwrap());
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
+            /*
             Op::AddToStoreNar => {
                 PathInfo::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
@@ -48,6 +81,7 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 }
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
+            */
             Op::QueryPathInfo => {
                 String::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
@@ -65,11 +99,17 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 .unwrap();
             }
             Op::QueryValidPaths => {
-                Vec::<String>::deserialize(&mut des).unwrap();
+                let paths = Vec::<String>::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
                 // TODO: impl path query
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                0_u64.serialize(&mut ser).unwrap();
+                let db = &db.read().unwrap();
+                db.iter()
+                    .filter(|x| paths.contains(x.0))
+                    .map(|x| x.0.clone())
+                    .collect::<Vec<String>>()
+                    .serialize(&mut ser)
+                    .unwrap();
             }
             Op::AddMultipleToStore => {
                 bool::deserialize(&mut des).unwrap();
@@ -77,15 +117,13 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 let mut fr = sirius::de::FramedReader::new(&mut read);
                 let num_paths = u64::deserialize(&mut Deserializer::new(&mut fr)).unwrap();
                 for _i in 0..num_paths {
-                    println!(
-                        "{:?}",
-                        PathInfo::deserialize(&mut Deserializer::new(&mut fr)).unwrap()
-                    );
+                    let path = PathInfo::deserialize(&mut Deserializer::new(&mut fr)).unwrap();
                     let mut nar = libnar::Archive::new(&mut fr);
-                    let entries = nar.entries().unwrap();
-                    for entry in entries {
-                        entry.unwrap();
-                    }
+                    let s = store.join(std::path::Path::new(&path.path).strip_prefix("/").unwrap());
+                    let s = s.to_str().unwrap();
+                    println!("{}", s);
+                    nar.unpack(s).unwrap();
+                    db.write().unwrap().insert(path.path.clone(), path);
                 }
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
@@ -93,7 +131,9 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 println!("{:?}", BasicDerivation::deserialize(&mut des).unwrap());
                 u64::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                consts::BuildStatus::Built.serialize(&mut ser).unwrap();
+                consts::BuildStatus::TransientFailure
+                    .serialize(&mut ser)
+                    .unwrap();
                 String::from("built").serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
@@ -116,18 +156,6 @@ fn handle(conn: std::os::unix::net::UnixStream) {
                 println!("{:?}", op);
                 unimplemented!();
             }
-        }
-    }
-}
-
-fn main() {
-    let ln = std::os::unix::net::UnixListener::bind("target/socket").unwrap();
-    for stream in ln.incoming() {
-        match stream {
-            Ok(stream) => {
-                std::thread::spawn(|| handle(stream));
-            }
-            Err(err) => panic!("{}", err),
         }
     }
 }
