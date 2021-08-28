@@ -14,6 +14,12 @@ struct Args {
     /// path to socket
     #[argh(option)]
     socket: String,
+    /// path to bwrap
+    #[argh(option)]
+    bwrap: String,
+    /// path to sh
+    #[argh(option)]
+    sh: String,
 }
 
 fn main() {
@@ -25,7 +31,11 @@ fn main() {
             Ok(stream) => {
                 let db = db.clone();
                 let store = args.store.clone();
-                std::thread::spawn(move || handle(stream, std::path::Path::new(&store), db));
+                let bwrap = args.bwrap.clone();
+                let sh = args.sh.clone();
+                std::thread::spawn(move || {
+                    handle(stream, std::path::Path::new(&store), db, bwrap, sh)
+                });
             }
             Err(err) => panic!("{}", err),
         }
@@ -36,6 +46,8 @@ fn handle(
     conn: std::os::unix::net::UnixStream,
     store: &std::path::Path,
     db: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<String, PathInfo>>>,
+    bwrap: String,
+    sh: String,
 ) {
     let mut read = conn.try_clone().unwrap();
     let mut write = conn.try_clone().unwrap();
@@ -128,8 +140,47 @@ fn handle(
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
             Op::BuildDerivation => {
-                println!("{:?}", BasicDerivation::deserialize(&mut des).unwrap());
+                let drv = BasicDerivation::deserialize(&mut des).unwrap();
                 u64::deserialize(&mut des).unwrap();
+                let args: Vec<String> = drv
+                    .input_srcs
+                    .iter()
+                    .map(|x| {
+                        [
+                            "--bind".to_string(),
+                            store
+                                .join(std::path::Path::new(&x).strip_prefix("/").unwrap())
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                            x.to_string(),
+                        ]
+                    })
+                    .flatten()
+                    .collect();
+                let mut cmd = std::process::Command::new(&bwrap);
+                cmd.arg("--unshare-all")
+                    .args(args)
+                    .args(["--tmpfs", "/dev", "--dev-bind", "/dev/null", "/dev/null"])
+                    .args([
+                        "--tmpfs", "/build", "--bind", &sh, "/bin/sh", "--chdir", "/build",
+                    ])
+                    .env_clear()
+                    .env("PATH", "/path-not-set")
+                    .env("HOME", "/homeless-shelter")
+                    .env("NIX_STORE", "/nix/store")
+                    .env("NIX_BUILD_CORES", "1")
+                    .env("NIX_BUILD_TOP", "/build")
+                    .env("TMPDIR", "/build")
+                    .env("TEMPDIR", "/build")
+                    .env("TMP", "/build")
+                    .env("TEMP", "/build")
+                    .args(["--proc", "/proc", "--symlink", "/proc/self/fd", "/dev/fd"])
+                    .envs(drv.env)
+                    .arg(drv.builder)
+                    .args(drv.args);
+                println!("{:?}", cmd);
+                println!("{:?}", cmd.status().unwrap());
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
                 consts::BuildStatus::TransientFailure
                     .serialize(&mut ser)
