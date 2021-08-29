@@ -2,7 +2,7 @@
 use argh::FromArgs;
 use kmpsearch::Haystack;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256, Sha512};
+use sha2::Digest;
 use sirius::consts::{self, Op};
 use sirius::de::Deserializer;
 use sirius::ser::Serializer;
@@ -81,29 +81,14 @@ fn handle(
         match op {
             Op::Nop => (),
             Op::SetOptions => {
-                println!("{:?}", ClientSettings::deserialize(&mut des).unwrap());
+                ClientSettings::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
             }
-            /*
-            Op::AddToStoreNar => {
-                PathInfo::deserialize(&mut des).unwrap();
-                bool::deserialize(&mut des).unwrap();
-                bool::deserialize(&mut des).unwrap();
-                let mut fr = sirius::de::FramedReader::new(&mut read);
-                let mut nar = libnar::Archive::new(&mut fr);
-                let entries = nar.entries().unwrap();
-                for entry in entries {
-                    println!("{:?}", entry.unwrap());
-                }
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
-            }
-            */
             Op::QueryPathInfo => {
                 let path = String::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
                 let db = db.read().unwrap();
                 let info = db.get(&path);
-                println!("{:?} {:?}", path, info);
                 match info {
                     Some(path) => Some(path.info.clone()).serialize(&mut ser).unwrap(),
                     None => Option::<PathInfoWithoutPath>::None
@@ -114,7 +99,6 @@ fn handle(
             Op::QueryValidPaths => {
                 let paths = Vec::<String>::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
-                // TODO: impl path query
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
                 let db = &db.read().unwrap();
                 db.iter()
@@ -134,7 +118,6 @@ fn handle(
                     let mut nar = libnar::Archive::new(&mut fr);
                     let s = store.join(std::path::Path::new(&path.path).strip_prefix("/").unwrap());
                     let s = s.to_str().unwrap();
-                    println!("{}", s);
                     nar.unpack(s).unwrap();
                     db.write().unwrap().insert(path.path.clone(), path);
                 }
@@ -224,15 +207,9 @@ fn handle(
                                 .join(std::path::Path::new(&x.path_s).strip_prefix("/").unwrap());
                             let to_path = store
                                 .join(std::path::Path::new(&x.path_s).strip_prefix("/").unwrap());
-                            // TODO: rewrite in rust
-                            std::process::Command::new("mv")
-                                .arg(&from_path)
-                                .arg(&to_path)
-                                .spawn()
-                                .unwrap();
-
-                            std::thread::sleep(std::time::Duration::SECOND);
-                            let data = libnar::to_vec(&to_path).unwrap();
+                            let data = libnar::to_vec(&from_path).unwrap();
+                            fs_extra::remove_items(&[&to_path]).unwrap();
+                            libnar::Archive::new(&*data).unpack(&to_path).unwrap();
                             let mut hasher = sha2::Sha256::new();
                             hasher.update(&data);
                             db.write().unwrap().insert(
@@ -282,7 +259,6 @@ fn handle(
                 .unwrap()
             }
             _ => {
-                println!("{:?}", op);
                 unimplemented!();
             }
         }
