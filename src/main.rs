@@ -1,5 +1,6 @@
 #![feature(duration_constants)]
 use argh::FromArgs;
+use kmpsearch::Haystack;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use sirius::consts::{self, Op};
@@ -193,6 +194,22 @@ fn handle(
                     .args(drv.args);
                 let status = cmd.status().unwrap();
                 if status.success() {
+                    let refs = drv
+                        .input_srcs
+                        .iter()
+                        .map(|x| {
+                            (
+                                &std::path::Path::new(x)
+                                    .file_name()
+                                    .unwrap()
+                                    .to_str()
+                                    .unwrap()
+                                    .as_bytes()[..32],
+                                x,
+                            )
+                        })
+                        .collect::<Vec<(&[u8], &String)>>();
+                    println!("{:?}", refs);
                     drv.outputs
                         .iter()
                         .map(|x| {
@@ -207,6 +224,7 @@ fn handle(
                                 .arg(&to_path)
                                 .spawn()
                                 .unwrap();
+
                             std::thread::sleep(std::time::Duration::SECOND);
                             let data = libnar::to_vec(&to_path).unwrap();
                             let mut hasher = sha2::Sha256::new();
@@ -220,7 +238,11 @@ fn handle(
                                         hash: format!("{:x}", hasher.finalize()),
                                         ca: "".to_string(),
                                         nar_size: data.len().try_into().unwrap(),
-                                        references: vec![],
+                                        references: refs
+                                            .iter()
+                                            .filter(|x| data.contains_needle(x.0))
+                                            .map(|x| x.1.clone())
+                                            .collect(),
                                         registration_time: 0,
                                         sigs: vec![],
                                         ultimate: true,

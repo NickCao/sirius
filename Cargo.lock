@@ -120,6 +120,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmpsearch"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "141d0c89e9eb5d516c24a873959008b615ddf13111c485100e3a5a2809c1b3d4"
+
+[[package]]
 name = "libc"
 version = "0.2.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -263,6 +269,7 @@ version = "0.1.0"
 dependencies = [
  "argh",
  "fs_extra",
+ "kmpsearch",
  "libnar",
  "serde",
  "serde_repr",
