@@ -142,6 +142,10 @@ fn handle(
             Op::BuildDerivation => {
                 let drv = BasicDerivation::deserialize(&mut des).unwrap();
                 u64::deserialize(&mut des).unwrap();
+                let env_overrride: std::collections::HashMap<String, String> = drv.outputs.iter().map(|x| (x.name.clone(), x.path_s.clone())).collect();
+                let tmps: Vec<(tempdir::TempDir, String)> = drv.outputs.iter().map(|x| (tempdir::TempDir::new("sirius").unwrap(), x.path_s.clone())).collect();
+                println!("{:?}", env_overrride);
+                let args_additional: Vec<String> = tmps.iter().map(|x| ["--bind".to_string(), x.0.path().to_str().unwrap().to_string(), x.1.clone()]).flatten().collect();
                 let args: Vec<String> = drv
                     .input_srcs
                     .iter()
@@ -161,6 +165,7 @@ fn handle(
                 let mut cmd = std::process::Command::new(&bwrap);
                 cmd.arg("--unshare-all")
                     .args(args)
+                    .args(args_additional)
                     .args(["--tmpfs", "/dev", "--dev-bind", "/dev/null", "/dev/null"])
                     .args([
                         "--tmpfs", "/build", "--bind", &sh, "/bin/sh", "--chdir", "/build",
@@ -169,7 +174,7 @@ fn handle(
                     .env("PATH", "/path-not-set")
                     .env("HOME", "/homeless-shelter")
                     .env("NIX_STORE", "/nix/store")
-                    .env("NIX_BUILD_CORES", "1")
+                    .env("NIX_BUILD_CORES", "12")
                     .env("NIX_BUILD_TOP", "/build")
                     .env("TMPDIR", "/build")
                     .env("TEMPDIR", "/build")
@@ -177,12 +182,18 @@ fn handle(
                     .env("TEMP", "/build")
                     .args(["--proc", "/proc", "--symlink", "/proc/self/fd", "/dev/fd"])
                     .envs(drv.env)
+                    .envs(env_overrride)
                     .arg(drv.builder)
                     .args(drv.args);
-                println!("{:?}", cmd);
                 println!("{:?}", cmd.status().unwrap());
+                tmps.iter().map(|x| {
+                    let path = store.join(std::path::Path::new(&x.1).strip_prefix("/").unwrap());
+                    let mut opt = fs_extra::dir::CopyOptions::new();
+                    opt.content_only = true;
+                    fs_extra::copy_items(&[x.0.path()],path, &opt).unwrap();
+                }).for_each(drop);
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                consts::BuildStatus::TransientFailure
+                consts::BuildStatus::Built
                     .serialize(&mut ser)
                     .unwrap();
                 String::from("built").serialize(&mut ser).unwrap();
