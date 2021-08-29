@@ -149,7 +149,7 @@ fn handle(
                     .map(|x| (x.name.clone(), x.path_s.clone()))
                     .collect();
                 let tmp_store = tempdir::TempDir::new("sirius").unwrap();
-                let args: Vec<String> = drv
+                let binds: Vec<String> = drv
                     .input_srcs
                     .iter()
                     .map(|x| {
@@ -166,32 +166,39 @@ fn handle(
                     .flatten()
                     .collect();
                 let mut cmd = std::process::Command::new(&bwrap);
-                cmd.arg("--unshare-all")
-                    .args([
-                        "--bind",
-                        &tmp_store.path().to_str().unwrap().to_string(),
-                        "/",
-                    ])
-                    .args(args)
-                    .args(["--tmpfs", "/dev", "--dev-bind", "/dev/null", "/dev/null"])
-                    .args([
-                        "--tmpfs", "/build", "--bind", &sh, "/bin/sh", "--chdir", "/build",
-                    ])
-                    .env_clear()
-                    .env("PATH", "/path-not-set")
-                    .env("HOME", "/homeless-shelter")
-                    .env("NIX_STORE", "/nix/store")
-                    .env("NIX_BUILD_CORES", "12")
-                    .env("NIX_BUILD_TOP", "/build")
-                    .env("TMPDIR", "/build")
-                    .env("TEMPDIR", "/build")
-                    .env("TMP", "/build")
-                    .env("TEMP", "/build")
-                    .args(["--proc", "/proc", "--symlink", "/proc/self/fd", "/dev/fd"])
-                    .envs(drv.env)
-                    .envs(env_overrride)
-                    .arg(drv.builder)
-                    .args(drv.args);
+                cmd.args([
+                    "--unshare-all",
+                    "--die-with-parent",
+                    "--bind",
+                    tmp_store.path().to_str().unwrap(),
+                    "/",
+                    "--dev",
+                    "/dev",
+                    "--proc",
+                    "/proc",
+                    "--tmpfs",
+                    "/build",
+                    "--chdir",
+                    "/build",
+                    "--ro-bind",
+                    &sh,
+                    "/bin/sh",
+                ])
+                .args(binds)
+                .env_clear()
+                .env("PATH", "/path-not-set")
+                .env("HOME", "/homeless-shelter")
+                .env("NIX_STORE", "/nix/store")
+                .env("NIX_BUILD_CORES", "12")
+                .env("NIX_BUILD_TOP", "/build")
+                .env("TMPDIR", "/build")
+                .env("TEMPDIR", "/build")
+                .env("TMP", "/build")
+                .env("TEMP", "/build")
+                .envs(drv.env)
+                .envs(env_overrride)
+                .arg(drv.builder)
+                .args(drv.args);
                 let status = cmd.status().unwrap();
                 if status.success() {
                     let refs = drv
@@ -209,7 +216,6 @@ fn handle(
                             )
                         })
                         .collect::<Vec<(&[u8], &String)>>();
-                    println!("{:?}", refs);
                     drv.outputs
                         .iter()
                         .map(|x| {
