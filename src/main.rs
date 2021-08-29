@@ -1,3 +1,4 @@
+#![feature(duration_constants)]
 use argh::FromArgs;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
@@ -146,29 +147,13 @@ fn handle(
                     .iter()
                     .map(|x| (x.name.clone(), x.path_s.clone()))
                     .collect();
-                let tmps: Vec<(tempdir::TempDir, String)> = drv
-                    .outputs
-                    .iter()
-                    .map(|x| (tempdir::TempDir::new("sirius").unwrap(), x.path_s.clone()))
-                    .collect();
-                println!("{:?}", env_overrride);
-                let args_additional: Vec<String> = tmps
-                    .iter()
-                    .map(|x| {
-                        [
-                            "--bind".to_string(),
-                            x.0.path().to_str().unwrap().to_string(),
-                            x.1.clone(),
-                        ]
-                    })
-                    .flatten()
-                    .collect();
+                let tmp_store = tempdir::TempDir::new("sirius").unwrap();
                 let args: Vec<String> = drv
                     .input_srcs
                     .iter()
                     .map(|x| {
                         [
-                            "--bind".to_string(),
+                            "--ro-bind".to_string(),
                             store
                                 .join(std::path::Path::new(&x).strip_prefix("/").unwrap())
                                 .to_str()
@@ -181,8 +166,12 @@ fn handle(
                     .collect();
                 let mut cmd = std::process::Command::new(&bwrap);
                 cmd.arg("--unshare-all")
+                    .args([
+                        "--bind",
+                        &tmp_store.path().to_str().unwrap().to_string(),
+                        "/",
+                    ])
                     .args(args)
-                    .args(args_additional)
                     .args(["--tmpfs", "/dev", "--dev-bind", "/dev/null", "/dev/null"])
                     .args([
                         "--tmpfs", "/build", "--bind", &sh, "/bin/sh", "--chdir", "/build",
@@ -202,38 +191,52 @@ fn handle(
                     .envs(env_overrride)
                     .arg(drv.builder)
                     .args(drv.args);
-                println!("{:?}", cmd.status().unwrap());
-                tmps.iter()
-                    .map(|x| {
-                        let path =
-                            store.join(std::path::Path::new(&x.1).strip_prefix("/").unwrap());
-                        fs_extra::remove_items(&[&path]).unwrap();
-                        let mut opt = fs_extra::dir::CopyOptions::new();
-                        opt.copy_inside = true;
-                        fs_extra::copy_items(&[x.0.path()], &path, &opt).unwrap();
-                        let data = libnar::to_vec(&path).unwrap();
-                        let mut hasher = sha2::Sha256::new();
-                        hasher.update(&data);
-                        db.write().unwrap().insert(
-                            x.1.clone(),
-                            PathInfo {
-                                path: x.1.clone(),
-                                info: PathInfoWithoutPath {
-                                    deriver: "".to_string(),
-                                    hash: format!("{:x}", hasher.finalize()),
-                                    ca: "".to_string(),
-                                    nar_size: data.len().try_into().unwrap(),
-                                    references: vec![],
-                                    registration_time: 0,
-                                    sigs: vec![],
-                                    ultimate: true,
+                let status = cmd.status().unwrap();
+                if status.success() {
+                    drv.outputs
+                        .iter()
+                        .map(|x| {
+                            let from_path = tmp_store
+                                .path()
+                                .join(std::path::Path::new(&x.path_s).strip_prefix("/").unwrap());
+                            let to_path = store
+                                .join(std::path::Path::new(&x.path_s).strip_prefix("/").unwrap());
+                            // TODO: rewrite in rust
+                            std::process::Command::new("mv")
+                                .arg(&from_path)
+                                .arg(&to_path)
+                                .spawn()
+                                .unwrap();
+                            std::thread::sleep(std::time::Duration::SECOND);
+                            let data = libnar::to_vec(&to_path).unwrap();
+                            let mut hasher = sha2::Sha256::new();
+                            hasher.update(&data);
+                            db.write().unwrap().insert(
+                                x.path_s.clone(),
+                                PathInfo {
+                                    path: x.path_s.clone(),
+                                    info: PathInfoWithoutPath {
+                                        deriver: "".to_string(),
+                                        hash: format!("{:x}", hasher.finalize()),
+                                        ca: "".to_string(),
+                                        nar_size: data.len().try_into().unwrap(),
+                                        references: vec![],
+                                        registration_time: 0,
+                                        sigs: vec![],
+                                        ultimate: true,
+                                    },
                                 },
-                            },
-                        );
-                    })
-                    .for_each(drop);
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                consts::BuildStatus::Built.serialize(&mut ser).unwrap();
+                            );
+                        })
+                        .for_each(drop);
+                    consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                    consts::BuildStatus::Built.serialize(&mut ser).unwrap();
+                } else {
+                    consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                    consts::BuildStatus::MiscFailure
+                        .serialize(&mut ser)
+                        .unwrap();
+                }
                 String::from("built").serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
