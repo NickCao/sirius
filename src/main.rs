@@ -1,5 +1,6 @@
 use argh::FromArgs;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256, Sha512};
 use sirius::consts::{self, Op};
 use sirius::de::Deserializer;
 use sirius::ser::Serializer;
@@ -95,20 +96,16 @@ fn handle(
             }
             */
             Op::QueryPathInfo => {
-                String::deserialize(&mut des).unwrap();
+                let path = String::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                Some(PathInfoWithoutPath {
-                    deriver: "".to_string(),
-                    hash: "0sg9f58l1jj88w6pdrfdpj5x9b1zrwszk84j81zvby36q9whhhqa".to_string(),
-                    references: vec![],
-                    registration_time: 0,
-                    nar_size: 120,
-                    ultimate: true,
-                    sigs: vec![],
-                    ca: "".to_string(),
-                })
-                .serialize(&mut ser)
-                .unwrap();
+                let db = db.read().unwrap();
+                let info = db.get(&path);
+                match info {
+                    Some(path) => path.info.serialize(&mut ser).unwrap(),
+                    None => Option::<PathInfoWithoutPath>::None
+                        .serialize(&mut ser)
+                        .unwrap(),
+                }
             }
             Op::QueryValidPaths => {
                 let paths = Vec::<String>::deserialize(&mut des).unwrap();
@@ -142,10 +139,28 @@ fn handle(
             Op::BuildDerivation => {
                 let drv = BasicDerivation::deserialize(&mut des).unwrap();
                 u64::deserialize(&mut des).unwrap();
-                let env_overrride: std::collections::HashMap<String, String> = drv.outputs.iter().map(|x| (x.name.clone(), x.path_s.clone())).collect();
-                let tmps: Vec<(tempdir::TempDir, String)> = drv.outputs.iter().map(|x| (tempdir::TempDir::new("sirius").unwrap(), x.path_s.clone())).collect();
+                let env_overrride: std::collections::HashMap<String, String> = drv
+                    .outputs
+                    .iter()
+                    .map(|x| (x.name.clone(), x.path_s.clone()))
+                    .collect();
+                let tmps: Vec<(tempdir::TempDir, String)> = drv
+                    .outputs
+                    .iter()
+                    .map(|x| (tempdir::TempDir::new("sirius").unwrap(), x.path_s.clone()))
+                    .collect();
                 println!("{:?}", env_overrride);
-                let args_additional: Vec<String> = tmps.iter().map(|x| ["--bind".to_string(), x.0.path().to_str().unwrap().to_string(), x.1.clone()]).flatten().collect();
+                let args_additional: Vec<String> = tmps
+                    .iter()
+                    .map(|x| {
+                        [
+                            "--bind".to_string(),
+                            x.0.path().to_str().unwrap().to_string(),
+                            x.1.clone(),
+                        ]
+                    })
+                    .flatten()
+                    .collect();
                 let args: Vec<String> = drv
                     .input_srcs
                     .iter()
@@ -186,33 +201,52 @@ fn handle(
                     .arg(drv.builder)
                     .args(drv.args);
                 println!("{:?}", cmd.status().unwrap());
-                tmps.iter().map(|x| {
-                    let path = store.join(std::path::Path::new(&x.1).strip_prefix("/").unwrap());
-                    let mut opt = fs_extra::dir::CopyOptions::new();
-                    opt.content_only = true;
-                    fs_extra::copy_items(&[x.0.path()],path, &opt).unwrap();
-                }).for_each(drop);
+                tmps.iter()
+                    .map(|x| {
+                        let path =
+                            store.join(std::path::Path::new(&x.1).strip_prefix("/").unwrap());
+                        fs_extra::remove_items(&[&path]).unwrap();
+                        let mut opt = fs_extra::dir::CopyOptions::new();
+                        opt.copy_inside = true;
+                        fs_extra::copy_items(&[x.0.path()], &path, &opt).unwrap();
+                        let data = libnar::to_vec(&path).unwrap();
+                        let mut hasher = sha2::Sha256::new();
+                        hasher.update(&data);
+                        db.write().unwrap().insert(
+                            path.to_str().unwrap().to_string(),
+                            PathInfo {
+                                path: path.to_str().unwrap().to_string(),
+                                info: PathInfoWithoutPath {
+                                    deriver: "".to_string(),
+                                    hash: format!("{:x}", hasher.finalize()),
+                                    ca: "".to_string(),
+                                    nar_size: data.len().try_into().unwrap(),
+                                    references: vec![],
+                                    registration_time: 0,
+                                    sigs: vec![],
+                                    ultimate: false,
+                                },
+                            },
+                        );
+                    })
+                    .for_each(drop);
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                consts::BuildStatus::Built
-                    .serialize(&mut ser)
-                    .unwrap();
+                consts::BuildStatus::Built.serialize(&mut ser).unwrap();
                 String::from("built").serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
-                0_u64.serialize(&mut ser).unwrap();
+                0_u64.serialize(&mut ser).unwrap(); // map of drv output to realization
             }
             Op::NarFromPath => {
-                println!("{:?}", String::deserialize(&mut des).unwrap());
+                let path = String::deserialize(&mut des).unwrap();
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                "nix-archive-1".serialize(&mut ser).unwrap();
-                "(".serialize(&mut ser).unwrap();
-                "type".serialize(&mut ser).unwrap();
-                "regular".serialize(&mut ser).unwrap();
-                "contents".serialize(&mut ser).unwrap();
-                "hello".serialize(&mut ser).unwrap();
-                ")".serialize(&mut ser).unwrap();
+                libnar::to_writer(
+                    &mut write,
+                    store.join(std::path::Path::new(&path).strip_prefix("/").unwrap()),
+                )
+                .unwrap()
             }
             _ => {
                 println!("{:?}", op);
