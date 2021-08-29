@@ -75,6 +75,7 @@ fn handle(
             }
             _ => panic!(),
         };
+        println!("{:?}", op);
         match op {
             Op::Nop => (),
             Op::SetOptions => {
@@ -100,8 +101,9 @@ fn handle(
                 consts::STDERR_LAST.serialize(&mut ser).unwrap();
                 let db = db.read().unwrap();
                 let info = db.get(&path);
+                println!("{:?} {:?}", path, info);
                 match info {
-                    Some(path) => path.info.serialize(&mut ser).unwrap(),
+                    Some(path) => Some(path.info.clone()).serialize(&mut ser).unwrap(),
                     None => Option::<PathInfoWithoutPath>::None
                         .serialize(&mut ser)
                         .unwrap(),
@@ -213,9 +215,9 @@ fn handle(
                         let mut hasher = sha2::Sha256::new();
                         hasher.update(&data);
                         db.write().unwrap().insert(
-                            path.to_str().unwrap().to_string(),
+                            x.1.clone(),
                             PathInfo {
-                                path: path.to_str().unwrap().to_string(),
+                                path: x.1.clone(),
                                 info: PathInfoWithoutPath {
                                     deriver: "".to_string(),
                                     hash: format!("{:x}", hasher.finalize()),
@@ -224,7 +226,7 @@ fn handle(
                                     references: vec![],
                                     registration_time: 0,
                                     sigs: vec![],
-                                    ultimate: false,
+                                    ultimate: true,
                                 },
                             },
                         );

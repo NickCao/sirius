@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+pub type DrvOutputs = std::collections::HashMap<DrvOutput, Realisation>;
+
+#[derive(
+    Deserialize, Serialize, Clone, Debug, std::cmp::Eq, std::cmp::PartialEq, std::hash::Hash,
+)]
+pub struct Hash {
+    pub hash_size: u64,
+    pub hash: Vec<u8>, // should be of length 64
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct StorePath {
+    pub base_name: String,
+}
+
+#[derive(
+    Deserialize, Serialize, Clone, Debug, std::cmp::Eq, std::cmp::PartialEq, std::hash::Hash,
+)]
+pub struct DrvOutput {
+    pub drv_hash: Hash,
+    pub output_name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Realisation {
+    pub id: DrvOutput,
+    pub out_path: StorePath,
+    pub signature: Vec<String>,
+    pub dependent_realisations: std::collections::HashMap<DrvOutput, StorePath>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PathInfo {
     pub path: String,
