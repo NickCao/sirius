@@ -82,6 +82,12 @@ impl<W: std::io::Write, R: std::io::Read> Client<W, R> {
             }
         }
     }
+    pub fn is_valid_path(&mut self, path: &str) -> Result<bool> {
+        self.write(Op::IsValidPath)?;
+        self.write(path)?;
+        self.process_stderr()?;
+        self.read::<bool>()
+    }
     pub fn query_path_from_hash_part(&mut self, hash: &str) -> Result<String> {
         self.write(Op::QueryPathFromHashPart)?;
         self.write(hash)?;
