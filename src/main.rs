@@ -2,8 +2,9 @@ use argh::FromArgs;
 use kmpsearch::Haystack;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use sirius::consts::{self, Op};
+use sirius::consts::BuildStatus;
 use sirius::de::Deserializer;
+use sirius::protocol::{Op, *};
 use sirius::ser::Serializer;
 use sirius::types::*;
 
@@ -56,12 +57,12 @@ fn handle(
     {
         let mut ser = Serializer::new(&mut write);
         let mut des = Deserializer::new(&mut read);
-        assert_eq!(consts::WORKER_MAGIC_1, u64::deserialize(&mut des).unwrap());
-        consts::WORKER_MAGIC_2.serialize(&mut ser).unwrap();
-        consts::PROTOCOL_VERSION.serialize(&mut ser).unwrap();
+        assert_eq!(WORKER_MAGIC_1, u64::deserialize(&mut des).unwrap());
+        WORKER_MAGIC_2.serialize(&mut ser).unwrap();
+        PROTOCOL_VERSION.serialize(&mut ser).unwrap();
         assert_eq!(288, u64::deserialize(&mut des).unwrap());
         assert_eq!(None, Option::<u64>::deserialize(&mut des).unwrap());
-        consts::STDERR_LAST.serialize(&mut ser).unwrap();
+        STDERR_LAST.serialize(&mut ser).unwrap();
     }
     loop {
         let mut des = Deserializer::new(&mut read);
@@ -81,11 +82,11 @@ fn handle(
             Op::Nop => (),
             Op::SetOptions => {
                 ClientSettings::deserialize(&mut des).unwrap();
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                STDERR_LAST.serialize(&mut ser).unwrap();
             }
             Op::QueryPathInfo => {
                 let path = String::deserialize(&mut des).unwrap();
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                STDERR_LAST.serialize(&mut ser).unwrap();
                 let db = db.read().unwrap();
                 let info = db.get(&path);
                 match info {
@@ -98,7 +99,7 @@ fn handle(
             Op::QueryValidPaths => {
                 let paths = Vec::<String>::deserialize(&mut des).unwrap();
                 bool::deserialize(&mut des).unwrap();
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                STDERR_LAST.serialize(&mut ser).unwrap();
                 let db = &db.read().unwrap();
                 db.iter()
                     .filter(|x| paths.contains(x.0))
@@ -120,7 +121,7 @@ fn handle(
                     nar.unpack(s).unwrap();
                     db.write().unwrap().insert(path.path.clone(), path);
                 }
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                STDERR_LAST.serialize(&mut ser).unwrap();
             }
             Op::BuildDerivation => {
                 let drv = BasicDerivation::deserialize(&mut des).unwrap();
@@ -233,13 +234,11 @@ fn handle(
                             );
                         })
                         .for_each(drop);
-                    consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                    consts::BuildStatus::Built.serialize(&mut ser).unwrap();
+                    STDERR_LAST.serialize(&mut ser).unwrap();
+                    BuildStatus::Built.serialize(&mut ser).unwrap();
                 } else {
-                    consts::STDERR_LAST.serialize(&mut ser).unwrap();
-                    consts::BuildStatus::MiscFailure
-                        .serialize(&mut ser)
-                        .unwrap();
+                    STDERR_LAST.serialize(&mut ser).unwrap();
+                    BuildStatus::MiscFailure.serialize(&mut ser).unwrap();
                 }
                 String::from("built").serialize(&mut ser).unwrap();
                 0_u64.serialize(&mut ser).unwrap();
@@ -250,7 +249,7 @@ fn handle(
             }
             Op::NarFromPath => {
                 let path = String::deserialize(&mut des).unwrap();
-                consts::STDERR_LAST.serialize(&mut ser).unwrap();
+                STDERR_LAST.serialize(&mut ser).unwrap();
                 libnar::to_writer(
                     &mut write,
                     store.join(std::path::Path::new(&path).strip_prefix("/").unwrap()),

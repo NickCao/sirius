@@ -2,7 +2,7 @@ use crate::de::Deserializer;
 use crate::protocol::*;
 use crate::ser::Serializer;
 use crate::types::ValidPathInfo;
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::os::unix::net::UnixStream;
 use thiserror::Error;
 
