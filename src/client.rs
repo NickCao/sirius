@@ -2,7 +2,7 @@ use crate::de::Deserializer;
 use crate::protocol::*;
 use crate::ser::Serializer;
 use crate::types::ValidPathInfo;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Serialize};
 use std::os::unix::net::UnixStream;
 use thiserror::Error;
 
@@ -80,6 +80,17 @@ impl<W: std::io::Write, R: std::io::Read> Client<W, R> {
                 STDERR_RESULT => unimplemented!(),
                 _ => unimplemented!(),
             }
+        }
+    }
+    pub fn query_path_from_hash_part(&mut self, hash: &str) -> Result<String> {
+        self.write(Op::QueryPathFromHashPart)?;
+        self.write(hash)?;
+        self.process_stderr()?;
+        let path: String = self.read()?;
+        if path.is_empty() {
+            Err(ClientError::Generic(String::from("invalid path")))
+        } else {
+            Ok(path)
         }
     }
     pub fn query_path_info(&mut self, path: &str) -> Result<ValidPathInfo> {
