@@ -98,11 +98,15 @@ impl<W: std::io::Write, R: std::io::Read> Client<W, R> {
             let ca: String = self.read()?;
             Ok(ValidPathInfo {
                 path: path.to_string(),
-                deriver: Some(deriver),
+                deriver: if deriver.is_empty() {
+                    None
+                } else {
+                    Some(deriver)
+                },
                 hash,
                 nar_size,
                 id: 0,
-                ca: Some(ca),
+                ca: if ca.is_empty() { None } else { Some(ca) },
                 references,
                 sigs,
                 ultimate,
