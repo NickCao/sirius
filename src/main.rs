@@ -1,4 +1,3 @@
-#![feature(duration_constants)]
 use argh::FromArgs;
 use kmpsearch::Haystack;
 use serde::{Deserialize, Serialize};
