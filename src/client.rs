@@ -93,6 +93,13 @@ impl<W: std::io::Write, R: std::io::Read> Client<W, R> {
             Ok(path)
         }
     }
+    pub fn nar_from_path(&mut self, path: &str) -> Result<()> {
+        self.write(Op::NarFromPath)?;
+        self.write(path)?;
+        self.process_stderr()?;
+        // TODO: copyNar
+        Ok(())
+    }
     pub fn query_path_info(&mut self, path: &str) -> Result<ValidPathInfo> {
         self.write(Op::QueryPathInfo)?;
         self.write(path)?;
