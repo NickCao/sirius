@@ -106,6 +106,11 @@ impl<W: std::io::Write, R: std::io::Read> Client<W, R> {
         // TODO: copyNar
         Ok(())
     }
+    pub fn optimise_store(&mut self) -> Result<u64> {
+        self.write(Op::OptimiseStore)?;
+        self.process_stderr()?;
+        self.read()
+    }
     pub fn query_path_info(&mut self, path: &str) -> Result<ValidPathInfo> {
         self.write(Op::QueryPathInfo)?;
         self.write(path)?;
