@@ -32,6 +32,20 @@ pub struct Realisation {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct ValidPathInfo {
+    pub path: String,
+    pub deriver: Option<String>,
+    pub hash: String,
+    pub references: Vec<String>,
+    pub registration_time: u64,
+    pub nar_size: u64,
+    pub id: u64,
+    pub ultimate: bool,
+    pub sigs: Vec<String>,
+    pub ca: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PathInfo {
     pub path: String,
     pub info: PathInfoWithoutPath,

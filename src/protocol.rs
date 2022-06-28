@@ -5,12 +5,29 @@
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-pub const WORKER_MAGIC_1: u32 = 0x6e697863;
-pub const WORKER_MAGIC_2: u32 = 0x6478696f;
-pub const PROTOCOL_VERSION: u32 = 1 << 8 | 34;
+pub const WORKER_MAGIC_1: u64 = 0x6e697863;
+pub const WORKER_MAGIC_2: u64 = 0x6478696f;
+pub const PROTOCOL_VERSION: u64 = 1 << 8 | 34;
+
+pub const STDERR_NEXT: u64 = 0x6f6c6d67;
+pub const STDERR_READ: u64 = 0x64617461;
+pub const STDERR_WRITE: u64 = 0x64617416;
+pub const STDERR_LAST: u64 = 0x616c7473;
+pub const STDERR_ERROR: u64 = 0x63787470;
+pub const STDERR_START_ACTIVITY: u64 = 0x53545254;
+pub const STDERR_STOP_ACTIVITY: u64 = 0x53544f50;
+pub const STDERR_RESULT: u64 = 0x52534c54;
+
+pub fn protocol_version_major(version: u64) -> u64 {
+    version & 0xff00
+}
+
+pub fn protocol_version_minor(version: u64) -> u64 {
+    version & 0x00ff
+}
 
 #[derive(Serialize_repr, Deserialize_repr, Debug)]
-#[repr(u32)]
+#[repr(u64)]
 pub enum Op {
     Nop = 0,
     IsValidPath = 1,

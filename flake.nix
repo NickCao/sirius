@@ -10,7 +10,7 @@
         rec {
           defaultPackage = pkgs.sirius;
           devShell = pkgs.mkShell {
-            nativeBuildInputs = [ pkgs.rust-analyzer ];
+            nativeBuildInputs = [ pkgs.rust-analyzer pkgs.rustfmt ];
             inputsFrom = [ defaultPackage ];
           };
         }
